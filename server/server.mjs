@@ -1,4 +1,4 @@
-// Mind — save anything, find it again. A calm grid of everything you keep, and a Curator that tags, summarizes and
+// Cube Library — save anything, find it again. A calm grid of everything you keep, and a Librarian that tags, summarizes and
 // finds things for you.
 //   node server/server.mjs      → http://127.0.0.1:$PORT (as a Cube app: behind Cube's gate)
 //
@@ -8,7 +8,7 @@
 //   POST /api/upload?name=       raw image bytes → an image card
 //   POST /api/cards/<id>         { title, body, tags, summary, colors, … } · POST /api/cards/<id>/delete
 //   GET  /api/asset?path=        a file from assets/
-//   GET  /api/tags · GET|PUT /api/spaces · GET /api/events · /api/curator/…
+//   GET  /api/tags · GET|PUT /api/spaces · GET /api/events · /api/librarian/…
 //   GET  /save?url=              a bookmarklet's target: saves, then says so
 import http from 'node:http';
 import fs from 'node:fs';
@@ -19,7 +19,7 @@ import { preview, image } from './fetch.mjs';
 import { createPersona } from '../kit/persona.mjs';
 
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const STATE = path.resolve(process.env.MIND_STATE || path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'cube-mind'));
+const STATE = path.resolve(process.env.MIND_STATE || path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'cube-library'));
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const settings = () => readJson(path.join(STATE, 'settings.json'), {});
 const HOME = path.resolve(String(process.env.MIND_HOME || settings().home || path.join(os.homedir(), 'Mind')).replace(/^~(?=$|\/)/, os.homedir()));
@@ -38,24 +38,24 @@ const rescan = () => { clearTimeout(rescanTimer); rescanTimer = setTimeout(() =>
 try { fs.watch(HOME, (e, f) => { if (!f || (/\.md$/.test(f) && !f.startsWith('.'))) rescan(); }); } catch {}
 setInterval(rescan, 30000);
 
-// ---- the Curator: tags and summarizes new saves (in batches), finds things, keeps Spaces ----
-const curator = createPersona({
-  name: 'Curator',
-  dir: path.join(STATE, 'curator'),
+// ---- the Librarian: tags and summarizes new saves (in batches), finds things, keeps Spaces ----
+const librarian = createPersona({
+  name: 'Librarian',
+  dir: path.join(STATE, 'librarian'),
   cwd: HOME,
-  brief: () => { try { return fs.readFileSync(path.join(APP, 'curator', 'CURATOR.md'), 'utf8').replaceAll('{{HOME}}', HOME).replaceAll('{{URL}}', URL_SELF).replaceAll('{{APP}}', APP); } catch { return ''; } },
+  brief: () => { try { return fs.readFileSync(path.join(APP, 'librarian', 'LIBRARIAN.md'), 'utf8').replaceAll('{{HOME}}', HOME).replaceAll('{{URL}}', URL_SELF).replaceAll('{{APP}}', APP); } catch { return ''; } },
   env: () => ({ MIND_HOME: HOME, MIND_URL: URL_SELF, MIND_APP: APP }),
   models: { claude: process.env.MIND_CLAUDE_MODEL, codex: process.env.MIND_CODEX_MODEL },
-  describe: c => c.card ? `[Mind: the user is looking at card ${c.card}${cards.get(c.card) ? ` (${HOME}/${cards.get(c.card).file})` : ''}.]` : c.query ? `[Mind: the user is looking at the results for “${c.query}”.]` : '',
-  eventPrompt: details => `[Mind: new things were saved:\n${details.map(d => `- ${d}`).join('\n')}\nFor each, add 2–5 lowercase tags that someone would search for (reuse existing tags where they fit: GET ${URL_SELF}/api/tags) and a one-sentence summary of what it is and why it might have been kept, by editing the card's front matter (tags, summary) or POST ${URL_SELF}/api/cards/<id>. Don't reply unless something needs the user; then say it in one line.]`,
+  describe: c => c.card ? `[Cube Library: the user is looking at card ${c.card}${cards.get(c.card) ? ` (${HOME}/${cards.get(c.card).file})` : ''}.]` : c.query ? `[Cube Library: the user is looking at the results for “${c.query}”.]` : '',
+  eventPrompt: details => `[Cube Library: new things were saved:\n${details.map(d => `- ${d}`).join('\n')}\nFor each, add 2–5 lowercase tags that someone would search for (reuse existing tags where they fit: GET ${URL_SELF}/api/tags) and a one-sentence summary of what it is and why it might have been kept, by editing the card's front matter (tags, summary) or POST ${URL_SELF}/api/cards/<id>. Don't reply unless something needs the user; then say it in one line.]`,
 });
-// new saves reach the Curator together, a little after the last one, so a burst of saves costs one turn
+// new saves reach the Librarian together, a little after the last one, so a burst of saves costs one turn
 let enrichTimer = null, enrichQueue = [];
 function enrich(card) {
   if (settings().autoTag === false) return;
   enrichQueue.push(`${card.id} · ${card.type} · ${card.title || card.body.slice(0, 80)} ${card.url ? `· ${card.url}` : ''} · ${HOME}/${card.file}`);
   clearTimeout(enrichTimer);
-  enrichTimer = setTimeout(() => { const q = enrichQueue.splice(0); if (q.length) curator.event(q.length > 1 ? `Tagging ${q.length} new cards` : 'Tagging a new card', q.join('\n- '), { quiet: true }); }, 15000);
+  enrichTimer = setTimeout(() => { const q = enrichQueue.splice(0); if (q.length) librarian.event(q.length > 1 ? `Tagging ${q.length} new cards` : 'Tagging a new card', q.join('\n- '), { quiet: true }); }, 15000);
 }
 
 // ---- saving ----
@@ -121,7 +121,7 @@ const SPACES = path.join(HOME, '.mind', 'spaces.json');
 function route(req, res) {
   const url = new URL(req.url, 'http://x');
   let p; try { p = decodeURIComponent(url.pathname); } catch { return send(res, 400, 'bad url', 'text/plain'); }
-  if (curator.route(req, res, p, '/api/curator', { body, send })) return;
+  if (librarian.route(req, res, p, '/api/librarian', { body, send })) return;
   if (p === '/api/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
     res.write(': hi\n\n'); clients.add(res);
@@ -152,7 +152,7 @@ function route(req, res) {
     const u = url.searchParams.get('url');
     if (!u || !isUrl(u)) return send(res, 400, 'Give a ?url= to save.', 'text/plain');
     saveUrl(u);
-    return send(res, 200, `<!doctype html><meta charset="utf-8"><title>Saved</title><body style="font:15px -apple-system,system-ui;display:grid;place-items:center;height:90vh;color:#444">Saved to Mind.<script>setTimeout(()=>{history.length>1?history.back():close()},900)</script>`, 'text/html; charset=utf-8');
+    return send(res, 200, `<!doctype html><meta charset="utf-8"><title>Saved</title><body style="font:15px -apple-system,system-ui;display:grid;place-items:center;height:90vh;color:#444">Saved to Cube Library.<script>setTimeout(()=>{history.length>1?history.back():close()},900)</script>`, 'text/html; charset=utf-8');
   }
   if (p === '/api/upload' && req.method === 'POST') {
     const name = path.basename(url.searchParams.get('name') || 'image.png').replace(/[^\w.\- ]/g, '');
@@ -194,10 +194,10 @@ function route(req, res) {
   res.writeHead(200, { 'content-type': TYPES[path.extname(abs)] || 'application/octet-stream', 'cache-control': 'no-cache' });
   fs.createReadStream(abs).pipe(res);
 }
-// spaces.json changed by the Curator (or by hand) reaches the page too
+// spaces.json changed by the Librarian (or by hand) reaches the page too
 try { fs.mkdirSync(path.dirname(SPACES), { recursive: true }); fs.watch(path.dirname(SPACES), () => broadcast({ type: 'spaces' })); } catch {}
 
 http.createServer((req, res) => { try { route(req, res); } catch (e) { if (!res.headersSent) send(res, 400, { error: String(e.message || e) }); else res.destroy(); } })
-  .listen(PORT, '127.0.0.1', () => console.log(`Mind → ${URL_SELF}  (${HOME})`));
+  .listen(PORT, '127.0.0.1', () => console.log(`Cube Library → ${URL_SELF}  (${HOME})`));
 process.on('uncaughtException', e => console.error('mind: uncaught', e));
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { curator.shutdown(); process.exit(0); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { librarian.shutdown(); process.exit(0); });

@@ -1,4 +1,4 @@
-// Cards: everything saved to Mind, one Markdown file each, so people, agents and Obsidian can all read them.
+// Cards: everything saved to Cube Library, one Markdown file each, so people, agents and Obsidian can all read them.
 //
 //   ~/Mind/<slug>-<id>.md       front matter (type, url, title, site, image, tags, colors, summary, created…) + body
 //   ~/Mind/assets/              images: uploads, and pictures fetched from saved links

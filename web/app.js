@@ -1,4 +1,4 @@
-// Mind's page: a grid of everything saved, one search, and a card view. Paste or drop anywhere to save.
+// Cube Library's page: a grid of everything saved, one search, and a card view. Paste or drop anywhere to save.
 import { applyTheme } from '/kit/persona.js';
 import { mountFloatingPersona } from '/kit/persona-float.js';
 applyTheme();
@@ -17,11 +17,13 @@ const S = { q: '', type: '', color: '', space: '', cards: [], all: [], spaces: [
 
 // ---- the query: words, plus the chips ----
 const query = () => [S.space ? S.spaces.find(s => s.name === S.space)?.query : '', S.q, S.type ? `type:${S.type}` : '', S.color ? `color:${S.color}` : ''].filter(Boolean).join(' ');
-async function load() {
+// motion: a load you asked for (start, search, a chip) cascades in; a live update animates only what changed
+async function load({ live = false } = {}) {
   const [cards, all] = await Promise.all([api(`/api/cards?q=${encodeURIComponent(query())}`), S.all.length && !S.q && !S.type && !S.color && !S.space ? null : api('/api/cards')]);
   S.cards = cards; if (all) S.all = all; else S.all = cards;
-  render();
+  render(live ? 'live' : 'cascade');
 }
+const seen = new Map();          // id → was it pending when last drawn
 function renderFilters() {
   const count = t => S.all.filter(c => !t || c.type === t || (t === 'link' && false)).length;
   const types = TYPES.filter(([t]) => !t || S.all.some(c => c.type === t));
@@ -61,15 +63,23 @@ function cardHtml(c) {
   }
 }
 const ADD = `<div class="add" id="add"><textarea id="addText" rows="3" placeholder="Paste a link, write a thought, or drop an image…"></textarea><div class="row"><span>Or paste anywhere. ⌘↵ saves.</span><button class="btn" id="addBtn">Save</button></div></div>`;
-function render() {
+function render(mode = 'cascade') {
   renderFilters();
   const filtered = S.q || S.type || S.color || S.space;
   const keep = document.activeElement?.id === 'addText' ? $('addText').value : null;
-  $('grid').innerHTML = (filtered ? '' : ADD) + (S.cards.map(cardHtml).join('') || `<div class="empty-mind">${filtered ? 'Nothing matches. Ask the Curator: it can find things from a description.' : ''}</div>`);
+  $('grid').innerHTML = (filtered ? '' : ADD) + (S.cards.map(cardHtml).join('') || `<div class="empty-mind">${filtered ? 'Nothing matches. Ask the Librarian (⌘J): it finds things from a description.' : ''}</div>`);
   if (keep !== null) { $('addText').value = keep; $('addText').focus(); }
+  let i = 0;
+  for (const el of $('grid').querySelectorAll('.card, .add')) {
+    const id = el.dataset.open, was = seen.get(id), c = id && S.cards.find(x => x.id === id);
+    if (mode === 'cascade') { if (i < 24) { el.classList.add('in'); el.style.animationDelay = `${i * 22}ms`; } i++; }
+    else if (id && was === undefined) el.classList.add('new');           // just saved
+    else if (id && was === true && c && !c.pending) el.classList.add('loaded');   // its preview just arrived
+  }
+  for (const c of S.cards) seen.set(c.id, c.pending);
   wireAdd();
 }
-$('grid').onclick = e => { const c = e.target.closest('[data-open]'); if (c) openCard(c.dataset.open); };
+$('grid').onclick = e => { const c = e.target.closest('[data-open]'); if (c) openCard(c.dataset.open, c); };
 
 // colors: worked out here from each picture as it loads, once, and kept on the card
 const pending = new Set();
@@ -130,10 +140,11 @@ addEventListener('drop', e => {
 });
 
 // ---- a card, opened ----
-async function openCard(id) {
+async function openCard(id, from = null) {
   const c = await api(`/api/cards/${id}`).catch(() => null); if (!c) return;
+  const fromRect = (from?.querySelector('img') || from)?.getBoundingClientRect?.();
   S.open = c; history.replaceState(null, '', `#${id}`);
-  curator.refreshContext?.();
+  librarian.refreshContext?.();
   const yt = /youtube\.com\/watch\?v=([\w-]{6,})|youtu\.be\/([\w-]{6,})/.exec(c.url || '');
   const media = yt ? `<iframe src="https://www.youtube-nocookie.com/embed/${yt[1] || yt[2]}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
     : c.type === 'quote' ? `<div class="reading quote">“${esc(c.body)}”${c.author ? `<div class="by">${esc(c.author)}</div>` : ''}</div>`
@@ -147,13 +158,26 @@ async function openCard(id) {
       <textarea class="side-title" id="dTitle" rows="1" placeholder="Untitled">${esc(c.title)}</textarea>
       ${c.url ? `<div class="src"><span>${esc(c.site || host(c.url))}${c.author ? ` · ${esc(c.author)}` : ''}</span><a class="btn" href="${esc(c.url)}" target="_blank" rel="noopener">Open ↗</a></div>` : ''}
       ${c.price ? `<div><span class="badge">${esc(c.price)}</span></div>` : ''}
-      <div><h4>Summary</h4><div class="summary${c.summary ? '' : ' none'}">${esc(c.summary || 'The Curator adds one shortly after you save.')}</div></div>
+      <div><h4>Summary</h4><div class="summary${c.summary ? '' : ' none'}">${esc(c.summary || 'The Librarian adds one shortly after you save.')}</div></div>
       <div><h4>Tags</h4><div class="tagbox" id="dTags">${c.tags.map(t => `<span>${esc(t)}<button data-untag="${esc(t)}">×</button></span>`).join('')}<input id="dTag" placeholder="Add a tag"></div></div>
       ${c.colors.length ? `<div><h4>Colors</h4><div class="palette">${c.colors.map(h => `<button style="background:${h}" title="${h}" data-hex="${h}"></button>`).join('')}</div></div>` : ''}
       <div><h4>${c.type === 'note' ? 'Note' : 'Your notes'}</h4><textarea class="notes" id="dBody" placeholder="Anything worth remembering about it…">${esc(c.type === 'quote' ? '' : c.body)}</textarea></div>
       ${c.similar.length ? `<div><h4>Similar</h4><div class="sim">${c.similar.map(cardHtml).join('')}</div></div>` : ''}
       <button class="btn plain danger" data-delete>Delete</button>
     </div></div>`;
+  // the picture (or the card) grows out of where it was in the grid
+  const target = $('detail').querySelector('.media > *');
+  if (fromRect && target && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const fly = () => {
+      const to = target.getBoundingClientRect();
+      if (!to.width || !to.height) return;
+      target.animate([
+        { transform: `translate(${fromRect.left - to.left}px, ${fromRect.top - to.top}px) scale(${fromRect.width / to.width}, ${fromRect.height / to.height})`, transformOrigin: 'top left', borderRadius: '14px', opacity: .9 },
+        { transform: 'none', transformOrigin: 'top left', opacity: 1 },
+      ], { duration: 340, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+    };
+    target.tagName === 'IMG' && !target.complete ? target.addEventListener('load', fly, { once: true }) : fly();
+  }
   const keepEdits = () => {
     const patch = { title: $('dTitle').value };
     if (c.type !== 'quote') patch.body = $('dBody').value;
@@ -163,31 +187,47 @@ async function openCard(id) {
   $('dTitle').onblur = keepEdits; $('dBody').onblur = keepEdits;
   $('dTag').onkeydown = async e => {
     if (e.key !== 'Enter' || !e.target.value.trim()) return;
-    const n = await post(`/api/cards/${c.id}`, { tags: [...c.tags, e.target.value] }); Object.assign(c, n); openCard(c.id);
+    const added = e.target.value.trim().toLowerCase().replace(/^#/, '');
+    const n = await post(`/api/cards/${c.id}`, { tags: [...c.tags, e.target.value] }); Object.assign(c, n); refreshSide(c.id, added);
   };
 }
-function closeCard() { $('detail').innerHTML = ''; S.open = null; history.replaceState(null, '', location.pathname); curator.refreshContext?.(); }
+async function refreshSide(id, added) {
+  const c = await api(`/api/cards/${id}`).catch(() => null); if (!c || !S.open || S.open.id !== id) return;
+  S.open = c;
+  $('dTags').querySelectorAll('span').forEach(x => x.remove());
+  $('dTag').insertAdjacentHTML('beforebegin', c.tags.map(t => `<span class="${t === added ? 'tag-in' : ''}">${esc(t)}<button data-untag="${esc(t)}">×</button></span>`).join(''));
+  $('dTag').value = ''; $('dTag').focus();
+}
+function closeCard() {
+  const ov = $('ov');
+  if (ov && !matchMedia('(prefers-reduced-motion: reduce)').matches) { ov.classList.add('out'); setTimeout(() => { if ($('ov') === ov) $('detail').innerHTML = ''; }, 170); }
+  else $('detail').innerHTML = '';
+  S.open = null; history.replaceState(null, '', location.pathname); librarian.refreshContext?.(); }
 $('detail').onclick = async e => {
   if (e.target.id === 'ov' || e.target.closest('[data-close]')) return closeCard();
   const c = S.open; if (!c) return;
-  const u = e.target.closest('[data-untag]'); if (u) { await post(`/api/cards/${c.id}`, { tags: c.tags.filter(t => t !== u.dataset.untag) }); return openCard(c.id); }
+  const u = e.target.closest('[data-untag]'); if (u) { u.parentElement.classList.add('tag-out'); await new Promise(r => setTimeout(r, 140)); await post(`/api/cards/${c.id}`, { tags: c.tags.filter(t => t !== u.dataset.untag) }); return refreshSide(c.id); }
   const h = e.target.closest('[data-hex]'); if (h) { closeCard(); S.color = ''; S.q = `color:${h.dataset.hex}`; $('q').value = S.q; return load(); }
   const o = e.target.closest('[data-open]'); if (o) return openCard(o.dataset.open);
-  if (e.target.closest('[data-delete]') && confirm('Delete this card? It goes to the .trash folder.')) { await post(`/api/cards/${c.id}/delete`); closeCard(); }
+  if (e.target.closest('[data-delete]') && confirm('Delete this card? It goes to the .trash folder.')) {
+    closeCard();
+    const el = $('grid').querySelector(`[data-open="${c.id}"]`);
+    if (el) { el.classList.add('out'); await new Promise(r => setTimeout(r, 240)); }
+    await post(`/api/cards/${c.id}/delete`);
+  }
 };
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && S.open && !e.target.closest?.('.pf')) closeCard();
   if (e.key === '/' && !e.target.closest('input, textarea')) { e.preventDefault(); $('q').focus(); }
 });
 
-// ---- the Curator, floating in the corner ----
-const BOOKMARK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-4.97 0-9 3.58-9 8 0 2.5 1.3 4.74 3.33 6.2L6 21l4.2-2.2c.58.13 1.18.2 1.8.2 4.97 0 9-3.58 9-8s-4.03-8-9-8Z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>';
-const curator = mountFloatingPersona($('mind'), {
-  base: '/api/curator', name: 'Curator', role: 'Your mind',
-  avatar: { color: 'linear-gradient(160deg, #da8fff, #af52de 55%, #7d2fb3)', svg: BOOKMARK },
+// ---- the Librarian, floating in the corner ----
+const librarian = mountFloatingPersona($('mind'), {
+  base: '/api/librarian', name: 'Librarian', role: 'Your library',
+  avatar: { color: 'linear-gradient(160deg, #da8fff, #af52de 55%, #7d2fb3)', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/></svg>' },
   hello: { suggestions: () => ['Find that chair I saved', 'Make a Space for recipes', 'What did I save this week?'] },
   context: () => S.open ? { label: S.open.title || S.open.type, card: S.open.id, ref: { card: S.open.id } } : S.q ? { label: `results for “${S.q}”`, query: S.q } : null,
-  placeholder: c => c?.card ? `Ask about “${(c.label || '').slice(0, 30)}”…` : 'Ask the Curator to find or sort anything…',
+  placeholder: c => c?.card ? `Ask about “${(c.label || '').slice(0, 30)}”…` : 'Ask the Librarian to find or sort anything…',
   refFor: text => S.all.some(c => c.id === text) ? { card: text } : null,
   open: ref => ref?.card && openCard(ref.card),
 });
@@ -198,7 +238,7 @@ let liveTimer = null;
 es.onmessage = e => {
   const ev = JSON.parse(e.data);
   if (ev.type === 'spaces') return api('/api/spaces').then(s => { S.spaces = s; renderFilters(); });
-  clearTimeout(liveTimer); liveTimer = setTimeout(async () => { S.all = []; await load(); if (S.open && ev.id === S.open.id && document.activeElement?.closest?.('.side') == null) openCard(S.open.id); }, 200);
+  clearTimeout(liveTimer); liveTimer = setTimeout(async () => { S.all = []; await load({ live: true }); if (S.open && ev.id === S.open.id && document.activeElement?.closest?.('.side') == null) refreshSide(S.open.id); }, 200);
 };
 S.spaces = await api('/api/spaces');
 await load();

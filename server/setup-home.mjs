@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const STATE = path.resolve(process.env.MIND_STATE || path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'cube-mind'));
+const STATE = path.resolve(process.env.MIND_STATE || path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'cube-library'));
 let settings = {}; try { settings = JSON.parse(fs.readFileSync(path.join(STATE, 'settings.json'), 'utf8')); } catch {}
 const HOME = path.resolve(String(process.env.MIND_HOME || settings.home || path.join(os.homedir(), 'Mind')).replace(/^~(?=$|\/)/, os.homedir()));
 fs.mkdirSync(STATE, { recursive: true });
@@ -17,7 +17,7 @@ fs.writeFileSync(path.join(HOME, '.gitignore'), '.DS_Store\n.trash/\n');
 const git = (...a) => execFileSync('git', ['-C', HOME, ...a], { stdio: 'ignore' });
 try {
   git('init', '-q', '-b', 'main'); git('add', '-A');
-  let who = []; try { execFileSync('git', ['-C', HOME, 'config', 'user.email'], { stdio: 'ignore' }); } catch { who = ['-c', 'user.name=Mind', '-c', 'user.email=mind@cube.invalid']; }
-  execFileSync('git', ['-C', HOME, ...who, 'commit', '-q', '-m', 'Start Mind'], { stdio: 'ignore' });
+  let who = []; try { execFileSync('git', ['-C', HOME, 'config', 'user.email'], { stdio: 'ignore' }); } catch { who = ['-c', 'user.name=Cube Library', '-c', 'user.email=library@cube.invalid']; }
+  execFileSync('git', ['-C', HOME, ...who, 'commit', '-q', '-m', 'Start Cube Library'], { stdio: 'ignore' });
 } catch {}
 console.log(`mind: created ${HOME}`);

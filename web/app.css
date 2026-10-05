@@ -1,4 +1,4 @@
-/* Mind on the kit (kit/ui.css): a calm grid of everything you keep. The Curator floats in the corner. */
+/* Cube Library on the kit (kit/ui.css): a calm grid of everything you keep. The Librarian floats in the corner. */
 :root { --serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif; --card-r: 14px; }
 html, body { background: var(--window); }
 .mind { position: relative; min-height: 100%; padding: 0 28px 80px; }
@@ -99,7 +99,7 @@ html, body { background: var(--window); }
 .drop[hidden] { display: none; }
 .drop div { font: 600 22px var(--font-display); color: var(--accent); background: var(--surface); padding: 18px 28px; border-radius: 16px; box-shadow: var(--shadow-lg); }
 
-/* the Curator, floating in the top corner of the whole page */
+/* the Librarian, floating in the top corner of the whole page */
 .mind > .pf { position: fixed; top: 14px; right: 18px; }
 
 @media (max-width: 900px) {
@@ -109,4 +109,27 @@ html, body { background: var(--window); }
   .card { margin-bottom: 10px; }
   .overlay { grid-template-columns: 1fr; overflow: auto; }
   .overlay .media { padding: 56px 12px 12px; }
+}
+
+/* ---- motion: small, quick, only where a state changes; none under reduced motion ---- */
+@keyframes card-in { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+@keyframes card-new { 0% { opacity: 0; transform: scale(.92); } 60% { opacity: 1; transform: scale(1.015); } 100% { transform: none; } }
+@keyframes ring { 0% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow); } 100% { box-shadow: 0 0 0 3px transparent, var(--shadow-sm); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes slide-in { from { transform: translateX(28px); opacity: 0; } }
+@keyframes pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: none; } }
+.grid .card.in, .grid .add.in { animation: card-in .42s cubic-bezier(.2, .8, .2, 1) both; }
+.grid .card.new { animation: card-new .45s cubic-bezier(.2, .8, .2, 1), ring 1.6s ease-out .2s; }
+.grid .card.loaded img, .grid .card.loaded .pad { animation: fade-in .45s ease-out; }
+.grid .card.out { transition: opacity .22s, transform .22s; opacity: 0; transform: scale(.9); }
+.overlay .side { animation: slide-in .32s cubic-bezier(.2, .8, .2, 1); }
+.overlay.out { transition: opacity .17s; opacity: 0; }
+.overlay .media > .reading { animation: card-in .34s cubic-bezier(.2, .8, .2, 1); }
+.tagbox span.tag-in { animation: pop .26s ease-out; }
+.tagbox span.tag-out { transition: opacity .14s, transform .14s; opacity: 0; transform: scale(.8); }
+.chip, .swatch { transition: background .15s, color .15s, transform .15s, box-shadow .15s; }
+.empty-mind { animation: fade-in .3s ease-out; }
+#toast div { animation: card-in .22s cubic-bezier(.2, .8, .2, 1); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
