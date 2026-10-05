@@ -42,16 +42,17 @@ $('q').onkeydown = e => { if (e.key === 'Escape') { $('q').value = ''; S.q = '';
 // ---- cards ----
 const PLAY = '<span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5Z"/></svg></span>';
 function cardHtml(c) {
-  const tags = c.tags.length ? `<div class="tags">${c.tags.slice(0, 4).map(t => `<span>${esc(t)}</span>`).join('')}</div>` : '';
+  // tags sit under a card's text, quietly, and each one filters the grid; a picture alone stays a picture
+  const tags = c.tags.length ? `<div class="tagline">${c.tags.slice(0, 4).map(t => `<span data-tag="${esc(t)}">#${esc(t)}</span>`).join('')}</div>` : '';
   const pic = c.image ? `<img src="${esc(img(c.image))}" alt="" loading="lazy" data-id="${c.id}" crossorigin="anonymous">` : '';
-  if (c.pending) return `<button class="card pending" data-open="${c.id}"><div class="shimmer"></div><div class="pad"><div class="t">${esc(c.url)}</div><div class="s">Saving…</div></div></button>`;
+  if (c.pending) return `<div class="card pending" data-open="${c.id}" role="button" tabindex="0"><div class="shimmer"></div><div class="pad"><div class="t">${esc(c.url)}</div><div class="s">Saving…</div></div></div>`;
   switch (c.type) {
-    case 'image': return `<button class="card image" data-open="${c.id}">${pic}${tags}</button>`;
-    case 'note': return `<button class="card note" data-open="${c.id}"><div class="pad"><div class="body">${esc(c.body)}</div></div>${tags}</button>`;
-    case 'quote': return `<button class="card quote" data-open="${c.id}"><div class="pad"><div class="body">“${esc(c.body)}”</div>${c.author ? `<div class="by">${esc(c.author)}</div>` : ''}</div>${tags}</button>`;
-    case 'tweet': return `<button class="card tweet" data-open="${c.id}"><div class="pad"><div class="who">${esc(c.author)}</div><div class="body">${esc(c.body)}</div></div>${pic}${tags}</button>`;
-    default: return `<button class="card ${c.type}" data-open="${c.id}">${pic}${c.type === 'video' && c.image ? PLAY : ''}<div class="pad"><div class="t">${esc(c.title || c.url)}</div>
-      ${!c.image && c.body ? `<div class="d">${esc(c.body)}</div>` : ''}<div class="s"><span>${esc(c.site || host(c.url))}</span>${c.price ? `<span class="price">${esc(c.price)}</span>` : ''}</div></div>${tags}</button>`;
+    case 'image': return `<div class="card image" data-open="${c.id}" role="button" tabindex="0">${pic}</div>`;
+    case 'note': return `<div class="card note" data-open="${c.id}" role="button" tabindex="0"><div class="pad"><div class="body">${esc(c.body)}</div>${tags}</div></div>`;
+    case 'quote': return `<div class="card quote" data-open="${c.id}" role="button" tabindex="0"><div class="pad"><div class="body">“${esc(c.body)}”</div>${c.author ? `<div class="by">${esc(c.author)}</div>` : ''}${tags}</div></div>`;
+    case 'tweet': return `<div class="card tweet" data-open="${c.id}" role="button" tabindex="0"><div class="pad"><div class="who">${esc(c.author)}</div><div class="body">${esc(c.body)}</div></div>${pic}${tags ? `<div class="pad pad-tags">${tags}</div>` : ''}</div>`;
+    default: return `<div class="card ${c.type}" data-open="${c.id}" role="button" tabindex="0">${pic}${c.type === 'video' && c.image ? PLAY : ''}<div class="pad"><div class="t">${esc(c.title || c.url)}</div>
+      ${!c.image && c.body ? `<div class="d">${esc(c.body)}</div>` : ''}<div class="s"><span>${esc(c.site || host(c.url))}</span>${c.price ? `<span class="price">${esc(c.price)}</span>` : ''}</div>${tags}</div></div>`;
   }
 }
 const ADD = `<div class="add" id="add"><textarea id="addText" rows="3" placeholder="Paste a link, write a thought, or drop an image…"></textarea><div class="row"><span>Or paste anywhere. ⌘↵ saves.</span><button class="btn" id="addBtn">Save</button></div></div>`;
@@ -71,7 +72,12 @@ function render(mode = 'cascade') {
   for (const c of S.cards) seen.set(c.id, c.pending);
   wireAdd();
 }
-$('grid').onclick = e => { const c = e.target.closest('[data-open]'); if (c) openCard(c.dataset.open, c); };
+function showTag(tag) { closeCardQuietly(); S.q = `#${tag}`; $('q').value = S.q; S.type = ''; S.color = ''; load(); scrollTo({ top: 0, behavior: 'smooth' }); }
+$('grid').onclick = e => {
+  const t = e.target.closest('[data-tag]'); if (t) { e.stopPropagation(); return showTag(t.dataset.tag); }
+  const c = e.target.closest('[data-open]'); if (c) openCard(c.dataset.open, c);
+};
+$('grid').onkeydown = e => { const c = e.target.closest('[data-open]'); if (c && e.key === 'Enter') openCard(c.dataset.open, c); };
 
 // colors: worked out here from each picture as it loads, once, and kept on the card
 const pending = new Set();
@@ -151,7 +157,7 @@ async function openCard(id, from = null) {
       ${c.url ? `<div class="src"><span>${esc(c.site || host(c.url))}${c.author ? ` · ${esc(c.author)}` : ''}</span><a class="btn" href="${esc(c.url)}" target="_blank" rel="noopener">Open ↗</a></div>` : ''}
       ${c.price ? `<div><span class="badge">${esc(c.price)}</span></div>` : ''}
       <div><h4>Summary</h4><div class="summary${c.summary ? '' : ' none'}">${esc(c.summary || 'The Librarian adds one shortly after you save.')}</div></div>
-      <div><h4>Tags</h4><div class="tagbox" id="dTags">${c.tags.map(t => `<span>${esc(t)}<button data-untag="${esc(t)}">×</button></span>`).join('')}<input id="dTag" placeholder="Add a tag"></div></div>
+      <div><h4>Tags</h4><div class="tagbox" id="dTags">${c.tags.map(t => `<span><a data-tag="${esc(t)}" title="Show everything tagged ${esc(t)}">${esc(t)}</a><button data-untag="${esc(t)}" title="Remove">×</button></span>`).join('')}<input id="dTag" placeholder="Add a tag"></div></div>
       ${c.colors.length ? `<div><h4>Colors</h4><div class="palette">${c.colors.map(h => `<button style="background:${h}" title="${h}" data-hex="${h}"></button>`).join('')}</div></div>` : ''}
       <div><h4>${c.type === 'note' ? 'Note' : 'Your notes'}</h4><textarea class="notes" id="dBody" placeholder="Anything worth remembering about it…">${esc(c.type === 'quote' ? '' : c.body)}</textarea></div>
       ${c.similar.length ? `<div><h4>Similar</h4><div class="sim">${c.similar.map(cardHtml).join('')}</div></div>` : ''}
@@ -187,9 +193,10 @@ async function refreshSide(id, added) {
   const c = await api(`/api/cards/${id}`).catch(() => null); if (!c || !S.open || S.open.id !== id) return;
   S.open = c;
   $('dTags').querySelectorAll('span').forEach(x => x.remove());
-  $('dTag').insertAdjacentHTML('beforebegin', c.tags.map(t => `<span class="${t === added ? 'tag-in' : ''}">${esc(t)}<button data-untag="${esc(t)}">×</button></span>`).join(''));
+  $('dTag').insertAdjacentHTML('beforebegin', c.tags.map(t => `<span class="${t === added ? 'tag-in' : ''}"><a data-tag="${esc(t)}" title="Show everything tagged ${esc(t)}">${esc(t)}</a><button data-untag="${esc(t)}" title="Remove">×</button></span>`).join(''));
   $('dTag').value = ''; $('dTag').focus();
 }
+function closeCardQuietly() { if (S.open) { $('detail').innerHTML = ''; S.open = null; history.replaceState(null, '', location.pathname); } }
 function closeCard() {
   const ov = $('ov');
   if (ov && !matchMedia('(prefers-reduced-motion: reduce)').matches) { ov.classList.add('out'); setTimeout(() => { if ($('ov') === ov) $('detail').innerHTML = ''; }, 170); }
@@ -198,6 +205,7 @@ function closeCard() {
 $('detail').onclick = async e => {
   if (e.target.id === 'ov' || e.target.closest('[data-close]')) return closeCard();
   const c = S.open; if (!c) return;
+  const tg = e.target.closest('[data-tag]'); if (tg) return showTag(tg.dataset.tag);
   const u = e.target.closest('[data-untag]'); if (u) { u.parentElement.classList.add('tag-out'); await new Promise(r => setTimeout(r, 140)); await post(`/api/cards/${c.id}`, { tags: c.tags.filter(t => t !== u.dataset.untag) }); return refreshSide(c.id); }
   const h = e.target.closest('[data-hex]'); if (h) { closeCard(); S.color = ''; S.q = `color:${h.dataset.hex}`; $('q').value = S.q; return load(); }
   const o = e.target.closest('[data-open]'); if (o) return openCard(o.dataset.open);
