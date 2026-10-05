@@ -138,10 +138,47 @@ addEventListener('drop', e => {
 });
 
 // ---- a card, opened ----
+// ---- a card, opened: the card you clicked becomes the detail view ----
+// With View Transitions (Chromium, Safari 18), the picture (or the card itself) morphs from its place in the grid
+// into the big view while the page behind softens and the details glide in; closing flies it back. Without them,
+// or under reduced motion, the view simply appears.
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canMorph = () => typeof document.startViewTransition === 'function' && !reduced();
+const heroOf = el => el && (el.matches?.('img') ? el : el.querySelector?.(':scope > img') || el);
+const named = [];
+function name(el, n) { if (el) { el.style.viewTransitionName = n; named.push(el); } }
+function unname() { for (const el of named.splice(0)) el.style.viewTransitionName = ''; }
+async function morph(change, { swap = false } = {}) {
+  if (!canMorph()) { change(); return; }
+  document.documentElement.classList.add('vt'); document.documentElement.classList.toggle('vt-swap', swap);
+  const vt = document.startViewTransition(() => { change(); });
+  try { await vt.finished; } catch {}
+  unname(); document.documentElement.classList.remove('vt', 'vt-swap');
+}
+
+// It opens at once from what the grid already knows; the rest (the full notes, similar cards) fills in as it arrives.
 async function openCard(id, from = null) {
-  const c = await api(`/api/cards/${id}`).catch(() => null); if (!c) return;
-  const fromRect = (from?.querySelector('img') || from)?.getBoundingClientRect?.();
-  S.open = c; history.replaceState(null, '', `#${id}`);
+  const known = S.cards.find(x => x.id === id) || S.all.find(x => x.id === id);
+  const full = api(`/api/cards/${id}`).catch(() => null);
+  const c = known ? { ...known, similar: null } : await full;
+  if (!c) return;
+  const swap = Boolean(S.open);                       // moving between cards inside the view
+  name(heroOf(from), 'hero');
+  await morph(() => { unname(); renderDetail(c); name($('detail').querySelector('.media > *'), 'hero'); }, { swap });
+  if (known) {
+    const f = await full;
+    if (f && S.open?.id === id) { Object.assign(S.open, f); fillSide(f); }
+  }
+}
+// the parts of the view that need the whole card: the notes (when you're not typing in them) and similar cards
+function fillSide(c) {
+  const notes = $('dBody');
+  if (notes && document.activeElement !== notes && c.type !== 'quote') notes.value = c.body || '';
+  const sim = $('detail').querySelector('.sim-slot');
+  if (sim) sim.outerHTML = c.similar?.length ? `<div class="sim-wrap fill-in"><h4>Similar</h4><div class="sim">${c.similar.map(cardHtml).join('')}</div></div>` : '';
+}
+function renderDetail(c) {
+  S.open = c; history.replaceState(null, '', `#${c.id}`);
   librarian.refreshContext?.();
   const yt = /youtube\.com\/watch\?v=([\w-]{6,})|youtu\.be\/([\w-]{6,})/.exec(c.url || '');
   const media = yt ? `<iframe src="https://www.youtube-nocookie.com/embed/${yt[1] || yt[2]}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
@@ -160,22 +197,9 @@ async function openCard(id, from = null) {
       <div><h4>Tags</h4><div class="tagbox" id="dTags">${c.tags.map(t => `<span><a data-tag="${esc(t)}" title="Show everything tagged ${esc(t)}">${esc(t)}</a><button data-untag="${esc(t)}" title="Remove">×</button></span>`).join('')}<input id="dTag" placeholder="Add a tag"></div></div>
       ${c.colors.length ? `<div><h4>Colors</h4><div class="palette">${c.colors.map(h => `<button style="background:${h}" title="${h}" data-hex="${h}"></button>`).join('')}</div></div>` : ''}
       <div><h4>${c.type === 'note' ? 'Note' : 'Your notes'}</h4><textarea class="notes" id="dBody" placeholder="Anything worth remembering about it…">${esc(c.type === 'quote' ? '' : c.body)}</textarea></div>
-      ${c.similar.length ? `<div><h4>Similar</h4><div class="sim">${c.similar.map(cardHtml).join('')}</div></div>` : ''}
+      ${c.similar === null ? '<div class="sim-slot"></div>' : c.similar.length ? `<div><h4>Similar</h4><div class="sim">${c.similar.map(cardHtml).join('')}</div></div>` : ''}
       <button class="btn plain danger" data-delete>Delete</button>
     </div></div>`;
-  // the picture (or the card) grows out of where it was in the grid
-  const target = $('detail').querySelector('.media > *');
-  if (fromRect && target && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    const fly = () => {
-      const to = target.getBoundingClientRect();
-      if (!to.width || !to.height) return;
-      target.animate([
-        { transform: `translate(${fromRect.left - to.left}px, ${fromRect.top - to.top}px) scale(${fromRect.width / to.width}, ${fromRect.height / to.height})`, transformOrigin: 'top left', borderRadius: '14px', opacity: .9 },
-        { transform: 'none', transformOrigin: 'top left', opacity: 1 },
-      ], { duration: 340, easing: 'cubic-bezier(.2, .8, .2, 1)' });
-    };
-    target.tagName === 'IMG' && !target.complete ? target.addEventListener('load', fly, { once: true }) : fly();
-  }
   const keepEdits = () => {
     const patch = { title: $('dTitle').value };
     if (c.type !== 'quote') patch.body = $('dBody').value;
@@ -197,18 +221,28 @@ async function refreshSide(id, added) {
   $('dTag').value = ''; $('dTag').focus();
 }
 function closeCardQuietly() { if (S.open) { $('detail').innerHTML = ''; S.open = null; history.replaceState(null, '', location.pathname); } }
-function closeCard() {
+async function closeCard() {
+  const c = S.open; if (!c) return;
+  S.open = null; history.replaceState(null, '', location.pathname); librarian.refreshContext?.();
+  const back = heroOf($('grid').querySelector(`[data-open="${c.id}"]`));
+  const r = back?.getBoundingClientRect();
+  const onScreen = r && r.bottom > 0 && r.top < innerHeight;
+  if (canMorph()) {
+    name($('detail').querySelector('.media > *'), 'hero');
+    await morph(() => { unname(); $('detail').innerHTML = ''; if (onScreen) name(back, 'hero'); });
+    return;
+  }
   const ov = $('ov');
-  if (ov && !matchMedia('(prefers-reduced-motion: reduce)').matches) { ov.classList.add('out'); setTimeout(() => { if ($('ov') === ov) $('detail').innerHTML = ''; }, 170); }
+  if (ov && !reduced()) { ov.classList.add('out'); setTimeout(() => { if ($('ov') === ov) $('detail').innerHTML = ''; }, 170); }
   else $('detail').innerHTML = '';
-  S.open = null; history.replaceState(null, '', location.pathname); librarian.refreshContext?.(); }
+}
 $('detail').onclick = async e => {
   if (e.target.id === 'ov' || e.target.closest('[data-close]')) return closeCard();
   const c = S.open; if (!c) return;
   const tg = e.target.closest('[data-tag]'); if (tg) return showTag(tg.dataset.tag);
   const u = e.target.closest('[data-untag]'); if (u) { u.parentElement.classList.add('tag-out'); await new Promise(r => setTimeout(r, 140)); await post(`/api/cards/${c.id}`, { tags: c.tags.filter(t => t !== u.dataset.untag) }); return refreshSide(c.id); }
   const h = e.target.closest('[data-hex]'); if (h) { closeCard(); S.color = ''; S.q = `color:${h.dataset.hex}`; $('q').value = S.q; return load(); }
-  const o = e.target.closest('[data-open]'); if (o) return openCard(o.dataset.open);
+  const o = e.target.closest('[data-open]'); if (o) return openCard(o.dataset.open, o);
   if (e.target.closest('[data-delete]') && confirm('Delete this card? It goes to the .trash folder.')) {
     closeCard();
     const el = $('grid').querySelector(`[data-open="${c.id}"]`);
