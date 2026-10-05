@@ -15,9 +15,6 @@ html, body { background: var(--window); }
 .chip:hover { background: var(--fill-2); color: var(--label); }
 .chip.on { background: var(--label); color: var(--window); }
 .chip .n { font-weight: 400; opacity: .6; font-variant-numeric: tabular-nums; }
-.chip.space { color: var(--label); }
-.chip.space::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--purple); }
-.chip.on.space::before { background: var(--window); }
 .sep { width: 1px; height: 16px; background: var(--separator-strong); margin: 0 6px; }
 .swatch { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .15); }
 .swatch:hover { transform: scale(1.15); }

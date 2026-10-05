@@ -7,12 +7,12 @@ Save anything and find it again. Links, pictures, articles, videos, posts, notes
   - **YouTube** videos play in the card. **X** posts keep their text and picture.
   - **Products** show their price.
   - Text in quotation marks, or ending in "— Name", becomes a quote.
-- **Finding:** one search field for words, `#tags`, `type:image` and `color:orange`, combined as you like. There are chips for each kind of card, swatches for colours picked from each picture, and Spaces, which are searches you keep.
+- **Finding:** one search field for words, `#tags`, `type:image` and `color:orange`, combined as you like. There are chips for each kind of card and swatches for the colours picked from each picture.
 - **A card, opened:** a large view of the thing itself, with its summary, tags, colours, your notes and similar cards.
 - **The Librarian** floats in the corner (⌘J), running on the machine's Claude Code or Codex.
   - It tags and summarises what you save, quietly and in batches, so a burst of saves costs one turn.
   - It finds things from a description ("that chair I saved in summer").
-  - It builds Spaces.
+  - It gathers things under a shared tag when you ask.
 
 ## Plain files, for people and agents
 
@@ -20,7 +20,6 @@ Save anything and find it again. Links, pictures, articles, videos, posts, notes
 |---|---|
 | A card | `~/Mind/<title>-<id>.md`: YAML front matter (`type`, `title`, `url`, `site`, `image`, `tags`, `colors`, `summary`, `created`, …) and the text as its body |
 | Pictures | `~/Mind/assets/`, kept locally so a card never depends on someone else's server |
-| Spaces | `~/Mind/.mind/spaces.json` |
 | Deleted cards | `~/Mind/.trash/` |
 
 Any agent can read the folder, or write a card file, and the page updates. Obsidian opens it as a vault, too: point Mind at a folder inside your Notes vault (`MIND_HOME`, or `"home"` in `~/.local/state/cube-library/settings.json`) and the two apps share it. Set `"autoTag": false` there to stop the Librarian from tagging new saves.

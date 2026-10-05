@@ -13,35 +13,27 @@ const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } ca
 
 const TYPES = [['', 'Everything'], ['link', 'Links'], ['image', 'Images'], ['article', 'Articles'], ['video', 'Videos'], ['note', 'Notes'], ['quote', 'Quotes'], ['product', 'Products'], ['tweet', 'Posts']];
 const COLORS = [['red', '#ff453a'], ['orange', '#ff9f0a'], ['yellow', '#ffd60a'], ['green', '#30d158'], ['blue', '#0a84ff'], ['purple', '#bf5af2'], ['pink', '#ff6482'], ['brown', '#a2845e'], ['black', '#1c1c1e'], ['white', '#f5f5f7']];
-const S = { q: '', type: '', color: '', space: '', cards: [], all: [], spaces: [], open: null };
+const S = { q: '', type: '', color: '', cards: [], all: [], open: null };
 
 // ---- the query: words, plus the chips ----
-const query = () => [S.space ? S.spaces.find(s => s.name === S.space)?.query : '', S.q, S.type ? `type:${S.type}` : '', S.color ? `color:${S.color}` : ''].filter(Boolean).join(' ');
+const query = () => [S.q, S.type ? `type:${S.type}` : '', S.color ? `color:${S.color}` : ''].filter(Boolean).join(' ');
 // motion: a load you asked for (start, search, a chip) cascades in; a live update animates only what changed
 async function load({ live = false } = {}) {
-  const [cards, all] = await Promise.all([api(`/api/cards?q=${encodeURIComponent(query())}`), S.all.length && !S.q && !S.type && !S.color && !S.space ? null : api('/api/cards')]);
+  const [cards, all] = await Promise.all([api(`/api/cards?q=${encodeURIComponent(query())}`), S.all.length && !S.q && !S.type && !S.color ? null : api('/api/cards')]);
   S.cards = cards; if (all) S.all = all; else S.all = cards;
   render(live ? 'live' : 'cascade');
 }
 const seen = new Map();          // id → was it pending when last drawn
 function renderFilters() {
-  const count = t => S.all.filter(c => !t || c.type === t || (t === 'link' && false)).length;
+  const count = t => S.all.filter(c => !t || c.type === t).length;
   const types = TYPES.filter(([t]) => !t || S.all.some(c => c.type === t));
   $('filters').innerHTML =
-    types.map(([t, label]) => `<button class="chip${S.type === t && !S.space ? ' on' : ''}" data-type="${t}">${label}${t ? `<span class="n">${count(t)}</span>` : ''}</button>`).join('') +
-    (S.spaces.length ? '<span class="sep"></span>' + S.spaces.map(s => `<button class="chip space${S.space === s.name ? ' on' : ''}" data-space="${esc(s.name)}" title="${esc(s.query)}">${esc(s.name)}</button>`).join('') : '') +
-    '<span class="sep"></span>' + COLORS.map(([n, hex]) => `<button class="swatch${S.color === n ? ' on' : ''}" data-color="${n}" title="${n}" style="background:${hex}"></button>`).join('') +
-    (S.q || S.type || S.color ? `<span class="sep"></span><button class="chip" data-save-space>Save as a Space</button>` : '');
+    types.map(([t, label]) => `<button class="chip${S.type === t ? ' on' : ''}" data-type="${t}">${label}${t ? `<span class="n">${count(t)}</span>` : ''}</button>`).join('') +
+    '<span class="sep"></span>' + COLORS.map(([n, hex]) => `<button class="swatch${S.color === n ? ' on' : ''}" data-color="${n}" title="${n}" style="background:${hex}"></button>`).join('');
 }
 $('filters').onclick = async e => {
-  const t = e.target.closest('[data-type]'); if (t) { S.type = t.dataset.type; S.space = ''; return load(); }
-  const sp = e.target.closest('[data-space]'); if (sp) { S.space = S.space === sp.dataset.space ? '' : sp.dataset.space; S.type = ''; return load(); }
+  const t = e.target.closest('[data-type]'); if (t) { S.type = t.dataset.type; return load(); }
   const c = e.target.closest('[data-color]'); if (c) { S.color = S.color === c.dataset.color ? '' : c.dataset.color; return load(); }
-  if (e.target.closest('[data-save-space]')) {
-    const name = prompt('Name this Space', S.q || S.type || S.color); if (!name) return;
-    S.spaces = await api('/api/spaces', { method: 'PUT', body: JSON.stringify([...S.spaces.filter(s => s.name !== name), { name, query: query() }]) });
-    S.space = name; S.q = ''; S.type = ''; S.color = ''; $('q').value = ''; load();
-  }
 };
 let qTimer = null;
 $('q').oninput = e => { S.q = e.target.value; clearTimeout(qTimer); qTimer = setTimeout(load, 140); };
@@ -65,7 +57,7 @@ function cardHtml(c) {
 const ADD = `<div class="add" id="add"><textarea id="addText" rows="3" placeholder="Paste a link, write a thought, or drop an image…"></textarea><div class="row"><span>Or paste anywhere. ⌘↵ saves.</span><button class="btn" id="addBtn">Save</button></div></div>`;
 function render(mode = 'cascade') {
   renderFilters();
-  const filtered = S.q || S.type || S.color || S.space;
+  const filtered = S.q || S.type || S.color;
   const keep = document.activeElement?.id === 'addText' ? $('addText').value : null;
   $('grid').innerHTML = (filtered ? '' : ADD) + (S.cards.map(cardHtml).join('') || `<div class="empty-mind">${filtered ? 'Nothing matches. Ask the Librarian (⌘J): it finds things from a description.' : ''}</div>`);
   if (keep !== null) { $('addText').value = keep; $('addText').focus(); }
@@ -225,7 +217,7 @@ addEventListener('keydown', e => {
 const librarian = mountFloatingPersona($('mind'), {
   base: '/api/librarian', name: 'Librarian', role: 'Your library',
   avatar: { color: 'linear-gradient(160deg, #da8fff, #af52de 55%, #7d2fb3)', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/></svg>' },
-  hello: { suggestions: () => ['Find that chair I saved', 'Make a Space for recipes', 'What did I save this week?'] },
+  hello: { suggestions: () => ['Find that chair I saved', 'Tag everything about cooking', 'What did I save this week?'] },
   context: () => S.open ? { label: S.open.title || S.open.type, card: S.open.id, ref: { card: S.open.id } } : S.q ? { label: `results for “${S.q}”`, query: S.q } : null,
   placeholder: c => c?.card ? `Ask about “${(c.label || '').slice(0, 30)}”…` : 'Ask the Librarian to find or sort anything…',
   refFor: text => S.all.some(c => c.id === text) ? { card: text } : null,
@@ -237,9 +229,7 @@ const es = new EventSource('/api/events');
 let liveTimer = null;
 es.onmessage = e => {
   const ev = JSON.parse(e.data);
-  if (ev.type === 'spaces') return api('/api/spaces').then(s => { S.spaces = s; renderFilters(); });
   clearTimeout(liveTimer); liveTimer = setTimeout(async () => { S.all = []; await load({ live: true }); if (S.open && ev.id === S.open.id && document.activeElement?.closest?.('.side') == null) refreshSide(S.open.id); }, 200);
 };
-S.spaces = await api('/api/spaces');
 await load();
 if (location.hash.length > 1) openCard(location.hash.slice(1));

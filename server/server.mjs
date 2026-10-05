@@ -8,7 +8,7 @@
 //   POST /api/upload?name=       raw image bytes → an image card
 //   POST /api/cards/<id>         { title, body, tags, summary, colors, … } · POST /api/cards/<id>/delete
 //   GET  /api/asset?path=        a file from assets/
-//   GET  /api/tags · GET|PUT /api/spaces · GET /api/events · /api/librarian/…
+//   GET  /api/tags · GET /api/events · /api/librarian/…
 //   GET  /save?url=              a bookmarklet's target: saves, then says so
 import http from 'node:http';
 import fs from 'node:fs';
@@ -38,7 +38,7 @@ const rescan = () => { clearTimeout(rescanTimer); rescanTimer = setTimeout(() =>
 try { fs.watch(HOME, (e, f) => { if (!f || (/\.md$/.test(f) && !f.startsWith('.'))) rescan(); }); } catch {}
 setInterval(rescan, 30000);
 
-// ---- the Librarian: tags and summarizes new saves (in batches), finds things, keeps Spaces ----
+// ---- the Librarian: tags and summarizes new saves (in batches), finds things ----
 const librarian = createPersona({
   name: 'Librarian',
   dir: path.join(STATE, 'librarian'),
@@ -116,7 +116,6 @@ function body(req, res, fn, limit = 2e6) {
   req.on('end', () => { let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (e) { return send(res, 400, { error: e.message }); } try { fn(b); } catch (e) { send(res, 400, { error: e.message }); } });
 }
 const view = (c, full = false) => c && ({ id: c.id, type: c.type, title: c.title, url: c.url, site: c.site, image: c.image, author: c.author, price: c.price, tags: c.tags, colors: c.colors, summary: c.summary, created: c.created, pending: Boolean(c.meta.pending), error: c.meta.error || null, file: c.file, body: full ? c.body : c.body.slice(0, 600) });
-const SPACES = path.join(HOME, '.mind', 'spaces.json');
 
 function route(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -178,13 +177,6 @@ function route(req, res) {
     return fs.createReadStream(abs).pipe(res);
   }
   if (p === '/api/tags') return send(res, 200, cards.tags());
-  if (p === '/api/spaces' && req.method === 'GET') return send(res, 200, readJson(SPACES, []));
-  if (p === '/api/spaces' && req.method === 'PUT') return body(req, res, b => {
-    if (!Array.isArray(b)) throw new Error('spaces are a list of { name, query }');
-    const list = b.filter(s => s && s.name && s.query).map(s => ({ name: String(s.name).slice(0, 60), query: String(s.query).slice(0, 300) })).slice(0, 50);
-    fs.mkdirSync(path.dirname(SPACES), { recursive: true }); fs.writeFileSync(SPACES, JSON.stringify(list, null, 2));
-    broadcast({ type: 'spaces' }); send(res, 200, list);
-  });
   if (p.startsWith('/api/')) return send(res, 404, { error: 'unknown endpoint' });
   const rel = p === '/' ? '/web/index.html' : p;
   if (!/^\/(web|kit)\//.test(rel)) return send(res, 404, 'not found', 'text/plain');
@@ -194,8 +186,6 @@ function route(req, res) {
   res.writeHead(200, { 'content-type': TYPES[path.extname(abs)] || 'application/octet-stream', 'cache-control': 'no-cache' });
   fs.createReadStream(abs).pipe(res);
 }
-// spaces.json changed by the Librarian (or by hand) reaches the page too
-try { fs.mkdirSync(path.dirname(SPACES), { recursive: true }); fs.watch(path.dirname(SPACES), () => broadcast({ type: 'spaces' })); } catch {}
 
 http.createServer((req, res) => { try { route(req, res); } catch (e) { if (!res.headersSent) send(res, 400, { error: String(e.message || e) }); else res.destroy(); } })
   .listen(PORT, '127.0.0.1', () => console.log(`Cube Library → ${URL_SELF}  (${HOME})`));
