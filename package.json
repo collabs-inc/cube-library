@@ -1,0 +1,8 @@
+{
+  "name": "cube-mind",
+  "private": true,
+  "type": "module",
+  "description": "Mind: save anything, find it again, with a Curator. A Cube app.",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server/server.mjs", "setup": "node server/setup-home.mjs", "test": "node --test server/*.test.mjs" }
+}

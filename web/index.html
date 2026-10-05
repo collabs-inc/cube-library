@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mind</title>
+<link rel="icon" href="/web/icon.svg">
+<link rel="stylesheet" href="/kit/ui.css">
+<link rel="stylesheet" href="/web/app.css">
+</head>
+<body>
+<main class="mind" id="mind">
+  <header class="top">
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search my mind…" autocomplete="off" spellcheck="false"></div>
+    <nav class="filters" id="filters"></nav>
+  </header>
+  <section class="grid" id="grid"></section>
+</main>
+<div id="detail"></div>
+<div id="toast"></div>
+<div class="drop" id="drop" hidden><div>Drop to save</div></div>
+<script type="module" src="/web/app.js"></script>
+</body>
+</html>

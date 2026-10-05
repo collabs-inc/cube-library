@@ -1,0 +1,7 @@
+{
+  "name": "Mind",
+  "description": "Save anything, find it again: links, pictures, notes and quotes in one calm grid, with a Curator that tags them.",
+  "icon": "web/icon.svg",
+  "install": "node server/setup-home.mjs",
+  "start": "node server/server.mjs"
+}
